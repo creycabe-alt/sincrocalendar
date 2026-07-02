@@ -366,12 +366,25 @@ function saveLocal(){
   try{localStorage.setItem("sg_dates",JSON.stringify(datesImportants));}catch(e){}
 }
 async function loadData(){
+  tasks=SEED.slice();
+  render();
   setSync("loading","Carregant...");
   try{
     var r=await sb.from("tasks").select("*").order("created_at");
     if(r.error)throw r.error;
-    tasks=r.data||[];
-    if(!tasks.length){var ins=await sb.from("tasks").insert(SEED);tasks=SEED.slice();}
+    if(r.data&&r.data.length){
+      tasks=r.data.map(function(t){return Object.assign({checklist:[],links:[],vender:[],detail:"",fecha:"",hoy:""},t);});
+      setSync("ok","Sincronitzat");
+      render();
+    } else {
+      try{await sb.from("tasks").insert(SEED);}catch(e2){}
+      setSync("ok","Sincronitzat");
+    }
+  }catch(e){
+    setSync("error","Offline");
+    console.error("Supabase error:",e);
+  }
+}
     else tasks=tasks.map(function(t){return Object.assign({checklist:[],links:[],vender:[],detail:"",fecha:"",hoy:""},t);});
     setSync("ok","Sincronitzat");render();
   }catch(e){setSync("error","Error connexio");console.error(e);}
