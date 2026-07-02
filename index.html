@@ -519,6 +519,123 @@ function showToast(msg){
   setTimeout(function(){t.className='toast';},2200);
 }
 
+
+// ── CALENDAR ─────────────────────────────────────────────────────────────────
+function loadReminders(){try{var r=localStorage.getItem('sg_reminders');if(r)calReminders=JSON.parse(r);}catch(e){}}
+function saveReminders(){try{localStorage.setItem('sg_reminders',JSON.stringify(calReminders));}catch(e){}}
+
+function renderCalendar(){
+  var MONTHS=['Gener','Febrer','Març','Abril','Maig','Juny','Juliol','Agost','Setembre','Octubre','Novembre','Desembre'];
+  var DAYS=['Dl','Dt','Dc','Dj','Dv','Ds','Dg'];
+  var today=new Date();
+  var y=calYear,m=calMonth;
+  var firstDay=new Date(y,m,1);
+  var lastDay=new Date(y,m+1,0);
+  var startDow=firstDay.getDay();
+  var startOffset=(startDow===0)?6:startDow-1;
+  var cells=[];
+  for(var i=0;i<startOffset;i++){var d=new Date(y,m,1-startOffset+i);cells.push({date:d,cur:false});}
+  for(var i=1;i<=lastDay.getDate();i++){cells.push({date:new Date(y,m,i),cur:true});}
+  while(cells.length%7!==0){var last=cells[cells.length-1].date;var nd=new Date(last);nd.setDate(nd.getDate()+1);cells.push({date:nd,cur:false});}
+  function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  var tasksByDate={};
+  tasks.forEach(function(t){if(t.fecha){if(!tasksByDate[t.fecha])tasksByDate[t.fecha]=[];tasksByDate[t.fecha].push(t);}});
+  var todayKey=dateKey(today);
+  var selKey=calSelected?dateKey(calSelected):null;
+  var gridHtml='<div class="cal-grid">';
+  DAYS.forEach(function(d){gridHtml+='<div class="cal-day-label">'+d+'</div>';});
+  cells.forEach(function(cell){
+    var key=dateKey(cell.date);
+    var isToday=key===todayKey;
+    var isSel=key===selKey;
+    var dayTasks=tasksByDate[key]||[];
+    var rems=calReminders[key]||[];
+    var cls='cal-day'+(cell.cur?'':' other-month')+(isToday?' today':'')+(isSel?' selected':'');
+    var dotsHtml='<div class="cal-dot-wrap">';
+    dayTasks.forEach(function(t){var c=CATS[t.cat]||CATS.personal;dotsHtml+='<div class="cal-dot" style="background:'+c.color+';color:#fff">'+c.icon+' '+esc(t.title.substring(0,10))+'</div>';});
+    rems.forEach(function(r){dotsHtml+='<div class="cal-dot" style="background:rgba(251,191,36,.25);color:#fbbf24">📌 '+esc(r.substring(0,10))+'</div>';});
+    dotsHtml+='</div>';
+    gridHtml+='<div class="'+cls+'" onclick="selectDay(new Date('+cell.date.getFullYear()+','+cell.date.getMonth()+','+cell.date.getDate()+'))">'
+      +'<div class="cal-day-num">'+cell.date.getDate()+'</div>'+dotsHtml+'</div>';
+  });
+  gridHtml+='</div>';
+  var monthTasks=[];
+  Object.keys(tasksByDate).forEach(function(k){
+    if(k.startsWith(y+'-'+String(m+1).padStart(2,'0'))){tasksByDate[k].forEach(function(t){monthTasks.push({key:k,task:t});});}
+  });
+  var monthRems=[];
+  Object.keys(calReminders).forEach(function(k){
+    if(k.startsWith(y+'-'+String(m+1).padStart(2,'0'))){(calReminders[k]||[]).forEach(function(r){monthRems.push({key:k,text:r});});}
+  });
+  var allItems=[].concat(
+    monthTasks.map(function(x){return {key:x.key,type:'task',t:x.task};}),
+    monthRems.map(function(x){return {key:x.key,type:'rem',text:x.text};}));
+  allItems.sort(function(a,b){return a.key.localeCompare(b.key);});
+  var agendaHtml='<div class="cal-agenda"><div class="cal-agenda-title">Agenda — '+MONTHS[m]+' '+y+'</div>';
+  if(allItems.length){
+    allItems.forEach(function(item){
+      var parts=item.key.split('-');
+      var dateStr=parts[2]+'/'+parts[1];
+      if(item.type==='task'){
+        var c=CATS[item.t.cat]||CATS.personal;
+        agendaHtml+='<div class="cal-agenda-item"><div class="cal-agenda-date">'+dateStr+'</div><div><div class="cal-agenda-text">'+esc(item.t.title)+'</div><span class="cal-agenda-cat" style="background:'+c.bg+';color:'+c.color+'">'+c.icon+' '+c.label+'</span></div></div>';
+      } else {
+        agendaHtml+='<div class="cal-agenda-item"><div class="cal-agenda-date">'+dateStr+'</div><div><div class="cal-agenda-text">📌 '+esc(item.text)+'</div><span class="cal-agenda-cat" style="background:rgba(251,191,36,.15);color:#fbbf24">Recordatori</span></div></div>';
+      }
+    });
+  } else {
+    agendaHtml+='<div class="cal-empty">Sense dates aquest mes</div>';
+  }
+  agendaHtml+='</div>';
+  document.getElementById('root').innerHTML=
+    '<div class="cal-wrap">'
+    +'<div class="cal-header"><div class="cal-title">'+MONTHS[m]+' '+y+'</div>'
+    +'<div class="cal-nav">'
+    +'<button class="cal-nav-btn" onclick="calPrev()">◀</button>'
+    +'<button class="cal-nav-btn" onclick="calToday()">Avui</button>'
+    +'<button class="cal-nav-btn" onclick="calNext()">▶</button>'
+    +'</div></div>'
+    +gridHtml+agendaHtml+'</div>';
+}
+
+function calPrev(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}render();}
+function calNext(){calMonth++;if(calMonth>11){calMonth=0;calYear++;}render();}
+function calToday(){var t=new Date();calYear=t.getFullYear();calMonth=t.getMonth();render();}
+
+function selectDay(date){
+  calSelected=date;render();
+  var MONTHS=['Gener','Febrer','Març','Abril','Maig','Juny','Juliol','Agost','Setembre','Octubre','Novembre','Desembre'];
+  var key=date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+  var rems=calReminders[key]||[];
+  var tasksDay=tasks.filter(function(t){return t.fecha===key;});
+  var modal=document.createElement('div');
+  modal.className='reminder-modal-bg';modal.id='rem-modal';
+  var taskListHtml=tasksDay.length?'<div class="dlabel" style="margin-bottom:6px">Tasques</div><div class="reminder-list">'+tasksDay.map(function(t){var c=CATS[t.cat]||CATS.personal;return '<div class="reminder-item">'+c.icon+' <span>'+esc(t.title)+'</span></div>';}).join('')+'</div>':'';
+  var remListHtml=rems.length?'<div class="dlabel" style="margin-bottom:6px;margin-top:8px">Recordatoris</div><div class="reminder-list" id="rem-list-'+key+'">'+rems.map(function(r,i){return '<div class="reminder-item">📌 <span>'+esc(r)+'</span><button class="reminder-item-del" onclick="delReminder(''+key+'','+i+')">✕</button></div>';}).join('')+'</div>':'<div id="rem-list-'+key+'"></div>';
+  modal.innerHTML='<div class="reminder-modal">'
+    +'<h3>'+date.getDate()+' '+MONTHS[date.getMonth()]+' '+date.getFullYear()+'</h3>'
+    +taskListHtml+remListHtml
+    +'<div class="dlabel" style="margin-top:10px;margin-bottom:6px">Afegir recordatori</div>'
+    +'<div class="radd-row"><input class="radd-inp" id="rem-inp" placeholder="Escriu un recordatori..." onkeydown="if(event.key==='Enter')addReminder(''+key+'')">'
+    +'<button class="radd-btn" onclick="addReminder(''+key+'')">+ Afegir</button></div>'
+    +'<button class="rclose-btn" onclick="closeRemModal()">Tancar</button>'
+    +'</div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click',function(e){if(e.target===modal)closeRemModal();});
+  setTimeout(function(){var inp=document.getElementById('rem-inp');if(inp)inp.focus();},50);
+}
+function closeRemModal(){var m=document.getElementById('rem-modal');if(m)m.remove();}
+function addReminder(key){
+  var inp=document.getElementById('rem-inp');
+  var text=inp?inp.value.trim():'';if(!text)return;
+  if(!calReminders[key])calReminders[key]=[];
+  calReminders[key].push(text);saveReminders();closeRemModal();render();
+}
+function delReminder(key,i){
+  if(calReminders[key]){calReminders[key].splice(i,1);if(!calReminders[key].length)delete calReminders[key];}
+  saveReminders();closeRemModal();render();
+}
+
 async function loadData(){
   setSync('loading','Carregant...');
   try{
