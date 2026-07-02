@@ -367,7 +367,7 @@ function saveLocal(){
 }
 async function loadData(){
   tasks=SEED.slice();
-  render();
+  try{render();}catch(e){document.getElementById("root").innerHTML='<div style="padding:2rem;background:#fee;color:#900;font-family:monospace;border-radius:8px;font-size:12px"><b>ERROR:</b><br>'+e.message+'<br><br>'+e.stack+'</div>';}
   setSync("loading","Carregant...");
   try{
     var r=await sb.from("tasks").select("*").order("created_at");
